@@ -1,0 +1,48 @@
+experiment:
+  run_name: ablation_resnet18_cbam_aug
+output_dir: outputs
+
+data:
+  data_dir: face_images
+  train_dir:
+  val_dir:
+  test_dir:
+  image_size: 224
+  grayscale_to_rgb: true
+  num_workers: 4
+  pin_memory: true
+  class_names: [angry, disgust, fear, happy, sad, surprise, neutral]
+  augmentation:
+    horizontal_flip_p: 0.5
+    rotation_degrees: 10
+    affine_translate: [0.05, 0.05]
+    affine_scale: [0.95, 1.05]
+    affine_shear: 5
+    brightness: 0.2
+    contrast: 0.2
+    saturation: 0.05
+    random_erasing_p: 0.25
+    random_erasing_scale: [0.02, 0.12]
+    random_erasing_ratio: [0.3, 3.3]
+
+model:
+  name: resnet18
+  attention_type: cbam
+  pretrained: true
+  num_classes: 7
+
+loss:
+  loss_type: cross_entropy
+  gamma: 2.0
+  label_smoothing: 0.0
+  use_class_weight: false
+  use_weighted_sampler: false
+
+train:
+  seed: 42
+  epochs: 60
+  batch_size: 64
+  lr: 0.0003
+  optimizer: adamw
+  weight_decay: 0.0001
+  scheduler: cosine
