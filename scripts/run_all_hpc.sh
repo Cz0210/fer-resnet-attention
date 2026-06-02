@@ -1,13 +1,9 @@
 #!/bin/bash
-set -euo pipefail
+set -eo pipefail
+set -u
 
-# Submit all four training jobs in parallel. Run from the project root:
-#   bash scripts/run_all_hpc.sh
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-cd "${PROJECT_ROOT}"
-
+PROJECT_DIR=${PROJECT_DIR:-/share/home/u20526/czx/CV}
+cd "${PROJECT_DIR}"
 mkdir -p logs
 
 declare -a JOBS=(
@@ -20,6 +16,10 @@ declare -a JOBS=(
 for item in "${JOBS[@]}"; do
   name="${item%%:*}"
   script="${item#*:}"
+  if [[ ! -f "${script}" ]]; then
+    echo "Missing sbatch script: ${script}" >&2
+    exit 1
+  fi
   result="$(sbatch "${script}")"
   echo "${name}: ${result}"
   if [[ "${result}" =~ Submitted[[:space:]]batch[[:space:]]job[[:space:]]([0-9]+) ]]; then

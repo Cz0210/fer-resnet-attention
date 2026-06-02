@@ -1,13 +1,9 @@
 #!/bin/bash
-set -euo pipefail
+set -eo pipefail
+set -u
 
-# Submit five ablation experiments in parallel. Run from the project root:
-#   bash scripts/run_ablation_hpc.sh
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-cd "${PROJECT_ROOT}"
-
+PROJECT_DIR=${PROJECT_DIR:-/share/home/u20526/czx/CV}
+cd "${PROJECT_DIR}"
 mkdir -p logs
 
 declare -a JOBS=(
@@ -23,6 +19,10 @@ for item in "${JOBS[@]}"; do
   rest="${item#*:}"
   config="${rest%%:*}"
   run_name="${rest#*:}"
+  if [[ ! -f "${config}" ]]; then
+    echo "Missing ablation config: ${config}" >&2
+    exit 1
+  fi
   result="$(sbatch \
     --job-name="fer_${run_name}" \
     --export=ALL,CONFIG_PATH="${config}",RUN_NAME="${run_name}" \

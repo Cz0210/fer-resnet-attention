@@ -1,55 +1,59 @@
 #!/bin/bash
-#SBATCH --job-name=fer_eval_all
-#SBATCH --gres=gpu:1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=32G
-#SBATCH --time=08:00:00
-#SBATCH --output=logs/slurm-%j.out
-#SBATCH --error=logs/slurm-%j.err
+#SBATCH -J fer_eval_all
+#SBATCH --partition=A800
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=7
+#SBATCH --gres=gpu:a800:1
+#SBATCH --output=logs/%j.out
+#SBATCH --error=logs/%j.err
 
-set -euo pipefail
+set -eo pipefail
+source ~/.bashrc
+conda activate fer_cv
+set -u
 
-# Edit these paths for your HPC cluster, or override them when submitting:
-#   PROJECT_DIR=/your/project/path DATA_DIR=/your/data/path sbatch scripts/evaluate_all.sbatch
-PROJECT_DIR="${PROJECT_DIR:-/share/home/u20526/czx/fer-resnet-attention}"
-DATA_DIR="${DATA_DIR:-${PROJECT_DIR}/face_images}"
-CONDA_ENV="${CONDA_ENV:-fer_cv}"
-CONDA_SH="${CONDA_SH:-$HOME/miniconda3/etc/profile.d/conda.sh}"
-EVAL_SPLIT="${EVAL_SPLIT:-test}"
-
+PROJECT_DIR=/share/home/u20526/czx/CV
 cd "${PROJECT_DIR}"
-mkdir -p logs outputs assets/figures
+export PYTHONPATH=$PWD
+mkdir -p logs outputs
 
-echo "========== Slurm Job Info =========="
-echo "Job ID: ${SLURM_JOB_ID:-local}"
-echo "Hostname: $(hostname)"
-echo "PWD: $(pwd)"
-echo "Git commit: $(git rev-parse --short HEAD 2>/dev/null || echo 'not available')"
-echo "Project dir: ${PROJECT_DIR}"
-echo "Data dir: ${DATA_DIR}"
-echo "Eval split: ${EVAL_SPLIT}"
-echo "Conda env: ${CONDA_ENV}"
-echo "===================================="
+DATA_DIR=${DATA_DIR:-${PROJECT_DIR}/face_images}
+EVAL_SPLIT=${EVAL_SPLIT:-test}
 
-if [[ -f "${CONDA_SH}" ]]; then
-  source "${CONDA_SH}"
-else
-  echo "Cannot find conda activation script: ${CONDA_SH}" >&2
-  echo "Set CONDA_SH=/path/to/conda.sh before sbatch if your cluster uses another path." >&2
+echo "===== ENV CHECK ====="
+echo "host: $(hostname)"
+echo "pwd: $(pwd)"
+echo "git commit: $(git rev-parse HEAD || true)"
+echo "conda env: ${CONDA_DEFAULT_ENV:-unset}"
+echo "python path: $(which python)"
+python --version
+python - <<'PY'
+import torch
+print("torch:", torch.__version__)
+print("cuda available:", torch.cuda.is_available())
+if torch.cuda.is_available():
+    print("device:", torch.cuda.get_device_name(0))
+PY
+echo "====================="
+if [[ ! -d "${DATA_DIR}" ]]; then
+  echo "Missing data dir: ${DATA_DIR}" >&2
+  exit 1
+fi
+if [[ ! -f "src/evaluate.py" ]]; then
+  echo "Missing evaluation entry: ${PROJECT_DIR}/src/evaluate.py" >&2
+  exit 1
+fi
+if [[ ! -f "src/visualize_results.py" ]]; then
+  echo "Missing visualization entry: ${PROJECT_DIR}/src/visualize_results.py" >&2
+  exit 1
+fi
+if [[ ! -f "scripts/collect_results.py" ]]; then
+  echo "Missing collection script: ${PROJECT_DIR}/scripts/collect_results.py" >&2
   exit 1
 fi
 
-conda activate "${CONDA_ENV}"
-
-echo "Python path: $(which python)"
-echo "Active conda env: ${CONDA_DEFAULT_ENV:-unknown}"
-python - <<'PY'
-import torch
-
-print(f"Torch version: {torch.__version__}")
-print(f"CUDA available: {torch.cuda.is_available()}")
-print(f"GPU name: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'None'}")
-PY
+mkdir -p assets/figures
 
 declare -a RUNS=(
   "cnn_baseline:configs/cnn_baseline.yaml"
@@ -60,27 +64,35 @@ declare -a RUNS=(
 
 for item in "${RUNS[@]}"; do
   run_name="${item%%:*}"
-  config_path="${item#*:}"
-  checkpoint="outputs/${run_name}/best.pt"
+  config_path="${PROJECT_DIR}/${item#*:}"
+  checkpoint="${PROJECT_DIR}/outputs/${run_name}/best.pt"
+  out_dir="${PROJECT_DIR}/outputs/${run_name}"
 
+  if [[ ! -f "${config_path}" ]]; then
+    echo "Skip ${run_name}: missing config ${config_path}" >&2
+    continue
+  fi
   if [[ ! -f "${checkpoint}" ]]; then
     echo "Skip ${run_name}: missing checkpoint ${checkpoint}"
     continue
   fi
 
-  echo "========== Evaluating ${run_name} =========="
+  echo "===== EVALUATE ${run_name} ====="
   python -m src.evaluate \
     --checkpoint "${checkpoint}" \
     --config "${config_path}" \
     --data_dir "${DATA_DIR}" \
     --split "${EVAL_SPLIT}" \
-    --output_dir "outputs/${run_name}"
+    --output_dir "${out_dir}"
 
   python -m src.visualize_results \
-    --run_dir "outputs/${run_name}" \
-    --assets_dir assets/figures \
-    --outputs_dir outputs
+    --run_dir "${out_dir}" \
+    --assets_dir "${PROJECT_DIR}/assets/figures" \
+    --outputs_dir "${PROJECT_DIR}/outputs"
 done
 
-python -m scripts.collect_results --outputs_dir outputs --assets_dir assets/figures
+python -m scripts.collect_results \
+  --outputs_dir "${PROJECT_DIR}/outputs" \
+  --assets_dir "${PROJECT_DIR}/assets/figures"
+
 echo "Evaluation and result collection finished."

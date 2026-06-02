@@ -1,7 +1,7 @@
 #!/bin/bash
-set -euo pipefail
+set -eo pipefail
+set -u
 
-# Sync trained outputs, logs, and PPT figures from an HPC login node.
 # Usage:
 #   bash scripts/sync_results_from_hpc.sh user@hpc.example.edu [/remote/project/dir] [local/project/dir]
 
@@ -11,7 +11,7 @@ if [[ $# -lt 1 ]]; then
 fi
 
 HPC_HOST="$1"
-REMOTE_PROJECT_DIR="${2:-/share/home/u20526/czx/fer-resnet-attention}"
+REMOTE_PROJECT_DIR="${2:-/share/home/u20526/czx/CV}"
 LOCAL_PROJECT_DIR="${3:-$(pwd)}"
 
 mkdir -p "${LOCAL_PROJECT_DIR}/outputs" "${LOCAL_PROJECT_DIR}/logs" "${LOCAL_PROJECT_DIR}/assets/figures"
