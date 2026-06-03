@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import csv
 import json
 from pathlib import Path
@@ -19,6 +20,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output_dir", default=None, help="Directory for reports. Defaults to checkpoint directory.")
     parser.add_argument("--batch_size", type=int, default=None, help="Override batch size.")
     return parser
+
+
+def _disable_pretrained_download(config: dict) -> dict:
+    config = copy.deepcopy(config)
+    if "pretrained" in config:
+        config["pretrained"] = False
+    if "weights" in config:
+        config["weights"] = None
+    model_cfg = config.get("model")
+    if isinstance(model_cfg, dict):
+        if "pretrained" in model_cfg:
+            model_cfg["pretrained"] = False
+        if "weights" in model_cfg:
+            model_cfg["weights"] = None
+    return config
 
 
 def _load_checkpoint(path: str | Path, device):
@@ -97,6 +113,7 @@ def main(argv: list[str] | None = None) -> None:
         if config is None:
             config_path = Path(args.checkpoint).with_name("config.yaml")
             config = load_config(config_path)
+    config = _disable_pretrained_download(config)
     if args.data_dir is not None:
         set_nested(config, ("data", "data_dir"), args.data_dir)
     if args.batch_size is not None:

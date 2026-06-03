@@ -3,7 +3,7 @@
 #SBATCH --partition=A800
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=8
+#SBATCH --cpus-per-task=7
 #SBATCH --gres=gpu:a800:1
 #SBATCH --output=logs/ppt-visuals-%j.out
 #SBATCH --error=logs/ppt-visuals-%j.err
@@ -14,9 +14,11 @@ conda activate fer_cv
 set -u
 
 PROJECT_DIR=/share/home/u20526/czx/CV
+export TORCH_HOME=/share/home/u20526/czx/CV/.torch_cache
+export XDG_CACHE_HOME=/share/home/u20526/czx/CV/.cache
 cd "${PROJECT_DIR}"
 export PYTHONPATH=$PWD
-mkdir -p logs assets/figures/ppt
+mkdir -p logs assets/figures/ppt "${TORCH_HOME}" "${XDG_CACHE_HOME}"
 
 echo "===== ENV CHECK ====="
 echo "host: $(hostname)"
@@ -32,6 +34,9 @@ if torch.cuda.is_available():
     print("device:", torch.cuda.get_device_name(0))
 PY
 echo "====================="
+echo "===== CONFIG PRETRAINED / WEIGHTS FIELDS ====="
+grep -nE 'pretrained|weights' configs/resnet18.yaml || true
+echo "================================================"
 
 if [[ ! -f outputs/resnet18/predictions.csv ]]; then
   echo "Missing outputs/resnet18/predictions.csv. Re-run src.evaluate first." >&2

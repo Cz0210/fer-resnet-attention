@@ -246,6 +246,16 @@ Grad-CAM 用于展示模型关注区域是否集中在眼睛、眉毛、嘴角�
 sbatch scripts/generate_ppt_visuals.sbatch
 ```
 
+训练阶段可以使用 `pretrained=True` 来加载 ImageNet 初始化权重；推理、评估和 Grad-CAM 阶段不会再次下载预训练权重，而是先关闭 `pretrained/weights`，只构建模型结构，再直接加载 `best.pt`。HPC 计算节点通常不能联网，因此不要在作业中触发 torchvision 自动下载。
+
+可用下面的命令检查离线推理加载：
+
+```bash
+python scripts/check_inference_no_download.py \
+  --config configs/resnet18.yaml \
+  --checkpoint outputs/resnet18/best.pt
+```
+
 脚本会读取 `outputs/resnet18/predictions.csv` 和 `face_images/test`，输出：
 
 - `assets/figures/ppt/ppt_resnet18_correct_examples.png`

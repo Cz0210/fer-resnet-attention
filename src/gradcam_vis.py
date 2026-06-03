@@ -142,6 +142,8 @@ def main(argv: list[str] | None = None) -> None:
 
     from src.infer_image import load_model_for_inference
 
+    if not Path(args.checkpoint).exists():
+        raise FileNotFoundError(f"Checkpoint not found: {args.checkpoint}")
     model, config, class_names, device = load_model_for_inference(args.checkpoint, args.config, args.device)
     if args.images:
         image_paths = [Path(path) for path in args.images[: args.max_images]]

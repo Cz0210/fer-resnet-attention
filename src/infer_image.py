@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 from pathlib import Path
 
 
@@ -16,6 +17,49 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def disable_pretrained_download(config: dict) -> dict:
+    """Disable pretrained weight resolution for offline inference/evaluation."""
+    config = copy.deepcopy(config)
+    if "pretrained" in config:
+        config["pretrained"] = False
+    if "weights" in config:
+        config["weights"] = None
+    model_cfg = config.get("model")
+    if isinstance(model_cfg, dict):
+        if "pretrained" in model_cfg:
+            model_cfg["pretrained"] = False
+        if "weights" in model_cfg:
+            model_cfg["weights"] = None
+    return config
+
+
+def _load_checkpoint_file(checkpoint_path: str | Path, device):
+    import torch
+
+    checkpoint_path = Path(checkpoint_path)
+    if not checkpoint_path.exists():
+        raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+    try:
+        return torch.load(checkpoint_path, map_location=device, weights_only=False)
+    except TypeError:
+        return torch.load(checkpoint_path, map_location=device)
+
+
+def _state_dict_from_checkpoint(checkpoint):
+    if hasattr(checkpoint, "get"):
+        return checkpoint.get("model_state_dict", checkpoint)
+    return checkpoint
+
+
+def _print_incompatible_keys(load_result) -> None:
+    missing = list(getattr(load_result, "missing_keys", []))
+    unexpected = list(getattr(load_result, "unexpected_keys", []))
+    if missing:
+        print(f"Missing checkpoint keys ({len(missing)}): {missing}")
+    if unexpected:
+        print(f"Unexpected checkpoint keys ({len(unexpected)}): {unexpected}")
+
+
 def load_model_for_inference(checkpoint_path, config_path=None, device_name="auto"):
     import torch
 
@@ -26,16 +70,17 @@ def load_model_for_inference(checkpoint_path, config_path=None, device_name="aut
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
         device = torch.device(device_name)
-    try:
-        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
-    except TypeError:
-        checkpoint = torch.load(checkpoint_path, map_location=device)
+    checkpoint = _load_checkpoint_file(checkpoint_path, device)
     config = load_config(config_path) if config_path else checkpoint.get("config")
     if config is None:
         config = load_config(Path(checkpoint_path).with_name("config.yaml"))
+    config = disable_pretrained_download(config)
     class_names = checkpoint.get("class_names") or config.get("data", {}).get("class_names")
+    if not class_names:
+        raise ValueError("Could not infer class names from checkpoint or config.")
     model = build_model(config, num_classes=len(class_names)).to(device)
-    model.load_state_dict(checkpoint.get("model_state_dict", checkpoint))
+    load_result = model.load_state_dict(_state_dict_from_checkpoint(checkpoint), strict=False)
+    _print_incompatible_keys(load_result)
     model.eval()
     return model, config, class_names, device
 
