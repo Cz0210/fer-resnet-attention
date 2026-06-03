@@ -4,17 +4,11 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Virtual env
-.venv/
-venv/
-env/
-*.egg-info/
-
-# Dataset
+# Dataset and raw files
 data/
 dataset/
 face_images/
-*.csv
+fer2013/
 *.zip
 *.tar
 *.tar.gz
@@ -26,6 +20,12 @@ logs/
 checkpoints/
 runs/
 wandb/
+*.pt
+*.pth
+
+# Result packages
+cv_results_figures.tar.gz
+fer_ppt_visuals.tar.gz
 
 # OS / editor
 .DS_Store
