@@ -1,0 +1,33 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual env
+.venv/
+venv/
+env/
+*.egg-info/
+
+# Dataset
+data/
+dataset/
+face_images/
+*.csv
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+
+# Training outputs
+outputs/
+logs/
+checkpoints/
+runs/
+wandb/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
