@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import random
 import tempfile
 from pathlib import Path
 
@@ -13,15 +14,21 @@ _mpl_cache.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("XDG_CACHE_HOME", str(_cache_dir))
 os.environ.setdefault("MPLCONFIGDIR", str(_mpl_cache))
 
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Generate Grad-CAM examples for a trained FER model.")
     parser.add_argument("--checkpoint", required=True, help="Path to a trained checkpoint.")
-    parser.add_argument("--images", nargs="+", required=True, help="One or more input image paths.")
+    parser.add_argument("--images", nargs="+", default=None, help="One or more input image paths.")
     parser.add_argument("--config", default=None, help="Optional config path. Defaults to checkpoint config.")
-    parser.add_argument("--output", default="gradcam_examples.png", help="Output image path.")
+    parser.add_argument("--output", default=None, help="Output image path for manual image mode.")
+    parser.add_argument("--data_dir", default=None, help="ImageFolder data root for automatic sampling.")
+    parser.add_argument("--split", default="test", help="Split name under data_dir for automatic sampling.")
+    parser.add_argument("--output_dir", default="assets/figures/ppt", help="Output directory for automatic sampling mode.")
+    parser.add_argument("--num_images", type=int, default=16, help="Number of sampled images in automatic mode.")
     parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"], help="Inference device.")
-    parser.add_argument("--max_images", type=int, default=8, help="Maximum number of images to show.")
+    parser.add_argument("--max_images", type=int, default=8, help="Maximum images in manual image mode.")
     return parser
 
 
@@ -95,23 +102,34 @@ def gradcam_for_pil(model, config, image, device, class_idx=None):
     return overlay_cam(image, cam), pred_idx
 
 
+def collect_images(data_dir: str | Path, split: str, num_images: int) -> list[Path]:
+    root = Path(data_dir) / split
+    if not root.exists():
+        raise FileNotFoundError(f"Missing split directory: {root}")
+    images = sorted(path for path in root.rglob("*") if path.suffix.lower() in IMAGE_EXTS)
+    if not images:
+        raise FileNotFoundError(f"No images found under: {root}")
+    rng = random.Random(42)
+    if len(images) > num_images:
+        images = rng.sample(images, num_images)
+    return sorted(images)
+
+
 def _save_grid(images, labels, output):
     import matplotlib.pyplot as plt
 
-    cols = min(len(images), 4)
-    rows = (len(images) + cols - 1) // cols
+    cols = 4
+    rows = max((len(images) + cols - 1) // cols, 1)
     fig, axes = plt.subplots(rows, cols, figsize=(4 * cols, 4 * rows))
-    if rows == 1 and cols == 1:
-        axes = [axes]
-    else:
-        axes = list(getattr(axes, "flat", axes))
+    axes = list(getattr(axes, "flat", [axes]))
     for ax, image, label in zip(axes, images, labels):
         ax.imshow(image)
-        ax.set_title(label)
+        ax.set_title(label, fontsize=10)
         ax.axis("off")
     for ax in axes[len(images) :]:
         ax.axis("off")
-    fig.tight_layout()
+    fig.suptitle("ResNet18 Grad-CAM Examples", fontsize=16)
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
     Path(output).parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output, dpi=200)
     plt.close(fig)
@@ -125,15 +143,24 @@ def main(argv: list[str] | None = None) -> None:
     from src.infer_image import load_model_for_inference
 
     model, config, class_names, device = load_model_for_inference(args.checkpoint, args.config, args.device)
+    if args.images:
+        image_paths = [Path(path) for path in args.images[: args.max_images]]
+        output = Path(args.output or Path(args.output_dir) / "ppt_resnet18_gradcam_examples.png")
+    else:
+        if args.data_dir is None:
+            raise ValueError("Provide --images or --data_dir for automatic sampling.")
+        image_paths = collect_images(args.data_dir, args.split, args.num_images)
+        output = Path(args.output_dir) / "ppt_resnet18_gradcam_examples.png"
+
     output_images = []
     labels = []
-    for path in args.images[: args.max_images]:
+    for path in image_paths:
         image = Image.open(path).convert("RGB")
         overlay, pred_idx = gradcam_for_pil(model, config, image, device)
         output_images.append(overlay)
-        labels.append(class_names[pred_idx])
-    _save_grid(output_images, labels, args.output)
-    print(f"Grad-CAM examples saved to: {args.output}")
+        labels.append(f"Pred: {class_names[pred_idx]}")
+    _save_grid(output_images, labels, output)
+    print(f"Grad-CAM examples saved to: {output}")
 
 
 if __name__ == "__main__":

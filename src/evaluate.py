@@ -7,6 +7,8 @@ import csv
 import json
 from pathlib import Path
 
+PPT_CLASS_ORDER = ["angry", "disgust", "fear", "happy", "neutral", "sad", "surprise"]
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Evaluate facial expression recognition checkpoints.")
@@ -48,19 +50,25 @@ def _predict(model, loader, device):
 
 
 def _write_predictions(path: Path, image_paths, y_true, y_pred, probs, class_names) -> None:
+    prob_order = [name for name in PPT_CLASS_ORDER if name in class_names]
+    prob_order += [name for name in class_names if name not in prob_order]
+    prob_fields = [f"prob_{name}" for name in prob_order]
+    fieldnames = ["image_path", "label", "pred", "confidence"] + prob_fields
     with path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["image_path", "label", "pred", "probabilities"])
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for image_path, label, pred, probability in zip(image_paths, y_true, y_pred, probs):
-            prob_dict = {class_names[idx]: float(value) for idx, value in enumerate(probability)}
-            writer.writerow(
-                {
-                    "image_path": image_path,
-                    "label": class_names[int(label)],
-                    "pred": class_names[int(pred)],
-                    "probabilities": json.dumps(prob_dict, ensure_ascii=False),
-                }
-            )
+            confidence = float(max(probability)) if probability else 0.0
+            prob_by_name = {class_names[idx]: float(probability[idx]) for idx in range(len(class_names))}
+            row = {
+                "image_path": image_path,
+                "label": class_names[int(label)],
+                "pred": class_names[int(pred)],
+                "confidence": confidence,
+            }
+            for class_name in prob_order:
+                row[f"prob_{class_name}"] = prob_by_name.get(class_name, 0.0)
+            writer.writerow(row)
 
 
 def main(argv: list[str] | None = None) -> None:

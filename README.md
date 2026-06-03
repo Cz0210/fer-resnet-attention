@@ -238,6 +238,49 @@ python -m src.gradcam_vis \
 
 Grad-CAM 用于展示模型关注区域是否集中在眼睛、眉毛、嘴角等表情关键区域。
 
+## PPT 可视化结果生成
+
+生成 ResNet18 的真实测试图片预测案例图和 Grad-CAM 图：
+
+```bash
+sbatch scripts/generate_ppt_visuals.sbatch
+```
+
+脚本会读取 `outputs/resnet18/predictions.csv` 和 `face_images/test`，输出：
+
+- `assets/figures/ppt/ppt_resnet18_correct_examples.png`
+- `assets/figures/ppt/ppt_resnet18_wrong_examples.png`
+- `assets/figures/ppt/ppt_resnet18_mixed_prediction_examples.png`
+- `assets/figures/ppt/ppt_resnet18_gradcam_examples.png`
+
+也可以本地单独运行：
+
+```bash
+python scripts/make_real_image_results.py \
+  --predictions outputs/resnet18/predictions.csv \
+  --data_dir face_images \
+  --save_dir assets/figures/ppt \
+  --n 12
+
+python -m src.gradcam_vis \
+  --config configs/resnet18.yaml \
+  --checkpoint outputs/resnet18/best.pt \
+  --data_dir face_images \
+  --output_dir assets/figures/ppt \
+  --num_images 16
+```
+
+如果 `predictions.csv` 仍是旧格式或不存在，请先重新评估：
+
+```bash
+python -m src.evaluate \
+  --config configs/resnet18.yaml \
+  --checkpoint outputs/resnet18/best.pt \
+  --data_dir face_images \
+  --split test \
+  --output_dir outputs/resnet18
+```
+
 ## 前端应用
 
 ```bash
